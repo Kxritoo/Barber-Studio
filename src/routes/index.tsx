@@ -15,11 +15,11 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "BarberStudio Bogotá — Reserva tu turno online" },
+      { title: "BarberStudio Medellín — Reserva tu turno online" },
       {
         name: "description",
         content:
-          "Agenda tu corte o perfilado de barba en BarberStudio. Elige barbero, servicio y hora disponible en segundos. Pago en el local.",
+          "Agenda tu corte o perfilado de barba en BarberStudio El Poblado. Elige barbero, servicio y hora disponible en segundos. Pago en el local.",
       },
       { property: "og:title", content: "BarberStudio — Reserva tu turno" },
       {
@@ -31,17 +31,25 @@ export const Route = createFileRoute("/")({
   component: Reserva,
 });
 
+// Número de WhatsApp de la barbería (código de país + número, sin espacios ni +)
+const WHATSAPP_NUMERO = "573001234567";
+const WHATSAPP_LINK = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(
+  "Hola BarberStudio, tengo una duda sobre mi turno.",
+)}`;
+
+const DIAS_SEMANA = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+
 function proximosDias(cantidad: number) {
   const base = new Date();
   return Array.from({ length: cantidad }, (_, i) => {
     const d = new Date(base);
-    d.setDate(base.getDate() + i);
+    d.setUTCDate(d.getUTCDate() + i);
     return {
-      iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-        d.getDate(),
+      iso: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
+        d.getUTCDate(),
       ).padStart(2, "0")}`,
-      dia: d.toLocaleDateString("es-CO", { weekday: "short" }).replace(".", ""),
-      num: d.getDate(),
+      dia: DIAS_SEMANA[d.getUTCDay()],
+      num: d.getUTCDate(),
     };
   });
 }
@@ -89,7 +97,7 @@ function Reserva() {
     <main className="mx-auto min-h-screen w-full max-w-2xl px-5 pb-16">
       <header className="flex items-center justify-between py-6">
         <div>
-          <p className="text-xs tracking-[0.35em] text-primary">BOGOTÁ · CHAPINERO</p>
+          <p className="text-xs tracking-[0.35em] text-primary">MEDELLÍN · EL POBLADO</p>
           <h1 className="gold-text text-4xl">BARBERSTUDIO</h1>
         </div>
         <Link
@@ -234,6 +242,18 @@ function Reserva() {
           </button>
         </form>
       </Bloque>
+
+      <a
+        href={WHATSAPP_LINK}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-whatsapp py-3 pl-4 pr-5 text-sm font-semibold text-whatsapp-foreground shadow-lg transition hover:brightness-110"
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
+          <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91A9.85 9.85 0 0 0 12.04 2Zm5.8 14.05c-.24.68-1.4 1.3-1.93 1.35-.53.06-1.02.24-3.44-.72-2.92-1.15-4.76-4.17-4.9-4.37-.15-.2-1.17-1.55-1.17-2.96 0-1.4.73-2.09 1-2.38.26-.29.57-.36.76-.36.19 0 .38 0 .55.01.18.01.41-.07.64.49.24.56.8 1.95.87 2.09.07.14.12.31.02.5-.1.2-.15.32-.29.5-.15.17-.31.39-.44.52-.15.15-.3.31-.13.6.17.29.75 1.24 1.61 2.01 1.11.99 2.04 1.29 2.33 1.44.29.15.46.12.63-.07.17-.2.72-.84.92-1.13.19-.29.39-.24.65-.14.27.09 1.68.79 1.97.94.29.14.48.22.55.34.07.13.07.74-.17 1.42Z" />
+        </svg>
+        ¿Tienes dudas? Escríbenos
+      </a>
     </main>
   );
 }
