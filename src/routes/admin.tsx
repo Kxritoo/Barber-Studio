@@ -100,6 +100,9 @@ function Agenda() {
   );
 
   const pendientes = delDia.filter((c) => c.estado === "pendiente").length;
+  const porCobrar = delDia
+    .filter((c) => c.estado === "pendiente")
+    .reduce((total, c) => total + (SERVICIOS.find((s) => s.id === c.servicioId)?.precio ?? 0), 0);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-5 pb-28">
@@ -107,8 +110,11 @@ function Agenda() {
         <div>
           <p className="text-xs tracking-[0.3em] text-primary">PANEL DEL DÍA</p>
           <h1 className="text-3xl capitalize">{formatFechaLarga(fecha)}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
             {delDia.length} citas · {pendientes} pendientes
+            <span className="rounded-full border border-success/40 bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
+              Por cobrar {formatPesos(porCobrar)}
+            </span>
           </p>
         </div>
         <Link to="/" className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
