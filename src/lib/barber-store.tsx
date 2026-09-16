@@ -89,7 +89,7 @@ export function formatPesos(valor: number) {
 }
 
 export function formatFechaLarga(iso: string) {
-  const [y, m, d] = iso.split("-").map(Number);
+  const [y = 2026, m = 1, d = 1] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("es-CO", {
     weekday: "long",
     day: "numeric",
