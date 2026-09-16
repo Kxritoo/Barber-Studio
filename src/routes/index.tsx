@@ -243,6 +243,11 @@ function Reserva() {
         </form>
       </Bloque>
 
+      <footer className="mt-10 pb-2 text-center text-xs text-muted-foreground">
+        © 2026 BarberStudio Medellín - Todos los derechos reservados
+      </footer>
+
+
       <a
         href={WHATSAPP_LINK}
         target="_blank"
