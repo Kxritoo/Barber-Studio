@@ -39,6 +39,32 @@ const WHATSAPP_LINK = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponen
 
 const DIAS_SEMANA = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 
+const TESTIMONIOS = [
+  {
+    nombre: "Juan Pérez",
+    comentario: "Excelente servicio, quedé como nuevo. El mejor corte de El Poblado sin duda.",
+  },
+  {
+    nombre: "Felipe Gómez",
+    comentario: "Muy puntual, me atendieron a la hora exacta de mi turno. Los recomiendo.",
+  },
+  {
+    nombre: "Andrés Rincón",
+    comentario: "El combo corte + barba es brutal, y apartando por la web no pierdo ni un minuto.",
+  },
+];
+
+const FAQS = [
+  {
+    pregunta: "¿Cómo puedo cancelar o reprogramar mi cita?",
+    respuesta: "Escríbenos directamente al WhatsApp con 2 horas de anticipación.",
+  },
+  {
+    pregunta: "¿Qué medios de pago aceptan?",
+    respuesta: "Efectivo, Nequi y Daviplata en el local.",
+  },
+];
+
 function proximosDias(cantidad: number) {
   const base = new Date();
   return Array.from({ length: cantidad }, (_, i) => {
@@ -241,6 +267,35 @@ function Reserva() {
             Confirmar cita · {nombreServicio(servicioId)}
           </button>
         </form>
+      </Bloque>
+
+      <Bloque titulo="Lo que dicen nuestros clientes">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {TESTIMONIOS.map((t) => (
+            <figure key={t.nombre} className="card-surface p-4">
+              <div className="flex gap-0.5 text-primary" aria-label="5 de 5 estrellas">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <svg key={i} viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                    <path d="M10 1.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L10 14.9l-5.3 2.7 1-5.8L1.5 7.7l5.9-.9L10 1.5z" />
+                  </svg>
+                ))}
+              </div>
+              <blockquote className="mt-2 text-sm text-foreground/90">"{t.comentario}"</blockquote>
+              <figcaption className="mt-2 text-xs font-semibold text-muted-foreground">{t.nombre}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </Bloque>
+
+      <Bloque titulo="Preguntas frecuentes">
+        <div className="space-y-3">
+          {FAQS.map((f) => (
+            <details key={f.pregunta} className="card-surface rounded-xl p-4 [&_summary::-webkit-details-marker]:hidden">
+              <summary className="cursor-pointer list-none text-sm font-semibold">{f.pregunta}</summary>
+              <p className="mt-2 text-sm text-muted-foreground">{f.respuesta}</p>
+            </details>
+          ))}
+        </div>
       </Bloque>
 
       <footer className="mt-10 pb-2 text-center text-xs text-muted-foreground">
