@@ -123,7 +123,7 @@ function Reserva() {
     <main className="mx-auto min-h-screen w-full max-w-2xl px-5 pb-16">
       <header className="flex items-center justify-between py-6">
         <div>
-          <p className="text-xs tracking-[0.35em] text-primary">MEDELLÍN · EL POBLADO</p>
+          <p className="text-xs tracking-[0.35em] text-primary">BARBERÍA & ESTILO TRADICIONAL EN MEDELLÍN</p>
           <h1 className="gold-text text-4xl">BARBERSTUDIO</h1>
         </div>
         <Link
