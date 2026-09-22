@@ -264,7 +264,7 @@ function Reserva() {
             type="submit"
             className="w-full rounded-xl bg-primary py-4 text-base font-bold text-primary-foreground shadow-gold"
           >
-            Confirmar cita · {nombreServicio(servicioId)}
+            ¡Listo! Agendar {nombreServicio(servicioId)} ahora
           </button>
         </form>
       </Bloque>
@@ -301,7 +301,6 @@ function Reserva() {
       <footer className="mt-10 pb-2 text-center text-xs text-muted-foreground">
         © 2026 BarberStudio Medellín - Todos los derechos reservados
       </footer>
-
 
       <a
         href={WHATSAPP_LINK}
