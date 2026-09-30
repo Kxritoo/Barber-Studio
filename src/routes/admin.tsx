@@ -23,13 +23,15 @@ export const Route = createFileRoute("/admin")({
       {
         name: "description",
         content:
-          "Panel interno de BarberStudio: agenda del día, estados de citas y registro de walk-ins.",
+          "Panel interno de BarberStudio: agenda del día, estados de turnos y registro de walk-ins.",
       },
       { property: "og:title", content: "Panel del día — BarberStudio" },
       {
         property: "og:description",
-        content: "Agenda del día, estados de citas y citas rápidas para el equipo.",
+        content: "Agenda del día, estados de turnos y turnos rápidos para el equipo.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -103,6 +105,9 @@ function Agenda() {
   const porCobrar = delDia
     .filter((c) => c.estado === "pendiente")
     .reduce((total, c) => total + (SERVICIOS.find((s) => s.id === c.servicioId)?.precio ?? 0), 0);
+  const totalGanado = delDia
+    .filter((c) => c.estado === "completada")
+    .reduce((total, c) => total + (SERVICIOS.find((s) => s.id === c.servicioId)?.precio ?? 0), 0);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-5 pb-28">
@@ -110,12 +115,15 @@ function Agenda() {
         <div>
           <p className="text-xs tracking-[0.3em] text-primary">PANEL DEL DÍA</p>
           <h1 className="text-3xl capitalize">{formatFechaLarga(fecha)}</h1>
-          <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-            {delDia.length} citas · {pendientes} pendientes
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>{delDia.length} turnos · {pendientes} pendientes</span>
             <span className="rounded-full border border-success/40 bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
               Por cobrar {formatPesos(porCobrar)}
             </span>
-          </p>
+            <span className="rounded-full border border-primary/50 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              Total ganado {formatPesos(totalGanado)}
+            </span>
+          </div>
         </div>
         <Link to="/" className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
           Vista cliente
@@ -152,7 +160,7 @@ function Agenda() {
       <div className="mt-5 space-y-3">
         {delDia.length === 0 && (
           <p className="card-surface p-6 text-center text-sm text-muted-foreground">
-            No hay citas para este filtro.
+            No hay turnos para este filtro.
           </p>
         )}
         {delDia.map((c) => (
@@ -164,7 +172,7 @@ function Agenda() {
         onClick={() => setModal(true)}
         className="fixed bottom-5 left-1/2 w-[min(90%,36rem)] -translate-x-1/2 rounded-xl bg-primary py-4 text-base font-bold text-primary-foreground shadow-gold"
       >
-        + Cita rápida / Walk-in
+        + Turno rápido / Walk-in
       </button>
 
       {modal && <ModalCitaRapida fecha={fecha} onClose={() => setModal(false)} />}
@@ -242,7 +250,7 @@ function ModalCitaRapida({ fecha, onClose }: { fecha: string; onClose: () => voi
     if (form.cliente.trim().length < 3) return setError("Escribe el nombre del cliente.");
     if (!form.hora) return setError("Selecciona la hora.");
     if (estaOcupado(form.fecha, form.hora, form.barberoId))
-      return setError("Ese barbero ya tiene una cita a esa hora.");
+      return setError("Ese barbero ya tiene un turno a esa hora.");
     agendar({ ...form, cliente: form.cliente.trim(), telefono: form.telefono.trim() || "Sin teléfono", origen: "manual" });
     onClose();
   };
@@ -253,7 +261,7 @@ function ModalCitaRapida({ fecha, onClose }: { fecha: string; onClose: () => voi
         onSubmit={guardar}
         className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card p-5 sm:mx-auto sm:max-w-md sm:rounded-2xl"
       >
-        <h2 className="text-2xl">Cita rápida</h2>
+        <h2 className="text-2xl">Turno rápido</h2>
         <p className="mb-4 text-xs text-muted-foreground">
           Para clientes que llaman o llegan caminando.
         </p>
@@ -326,7 +334,7 @@ function ModalCitaRapida({ fecha, onClose }: { fecha: string; onClose: () => voi
             Cerrar
           </button>
           <button className="flex-1 rounded-xl bg-primary py-3.5 font-bold text-primary-foreground">
-            Guardar cita
+            Guardar turno
           </button>
         </div>
       </form>
