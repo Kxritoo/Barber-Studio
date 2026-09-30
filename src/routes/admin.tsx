@@ -117,10 +117,10 @@ function Agenda() {
           <h1 className="text-3xl capitalize">{formatFechaLarga(fecha)}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>{delDia.length} turnos · {pendientes} pendientes</span>
-            <span className="rounded-full border border-success/40 bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
+            <span className="rounded-full border border-primary/50 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
               Por cobrar {formatPesos(porCobrar)}
             </span>
-            <span className="rounded-full border border-primary/50 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+            <span className="rounded-full border border-success/40 bg-success/15 px-2 py-0.5 text-xs font-semibold text-success">
               Total ganado {formatPesos(totalGanado)}
             </span>
           </div>
