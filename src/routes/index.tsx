@@ -26,6 +26,8 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content: "Corte Tradicional, Perfilado de Barba y Combo. Agenda tu hora sin llamadas.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Reserva,
@@ -56,7 +58,7 @@ const TESTIMONIOS = [
 
 const FAQS = [
   {
-    pregunta: "¿Cómo puedo cancelar o reprogramar mi cita?",
+    pregunta: "¿Cómo puedo cancelar o reprogramar mi turno?",
     respuesta: "Escríbenos directamente al WhatsApp con 2 horas de anticipación.",
   },
   {
@@ -128,9 +130,9 @@ function Reserva() {
         </div>
         <Link
           to="/admin"
-          className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted-foreground"
+          className="shrink-0 rounded-lg border border-border px-4 py-2.5 text-sm font-semibold text-muted-foreground"
         >
-          Personal
+          Acceso Barberos
         </Link>
       </header>
 
@@ -255,10 +257,10 @@ function Reserva() {
             placeholder="Celular (ej: 310 456 7821)"
             className="w-full rounded-lg border border-input bg-secondary px-4 py-3 outline-none focus:border-primary"
           />
-          <div className="rounded-lg border border-border bg-secondary/60 p-3 text-xs text-muted-foreground">
+          <p className="px-2 py-1 text-center text-xs leading-relaxed text-muted-foreground">
             El pago se realiza directamente en el establecimiento en efectivo o Nequi/Daviplata al
             finalizar el servicio.
-          </div>
+          </p>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <button
             type="submit"
