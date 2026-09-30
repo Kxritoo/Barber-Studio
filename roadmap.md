@@ -4,4 +4,4 @@
 - [x] Cambiar los textos visibles de cita/citas a turno/turnos.
 - [x] Actualizar el acceso superior a “Acceso Barberos”.
 - [x] Añadir “Total ganado” y vincular ambos totales a los filtros del panel.
-- [ ] Verificar las vistas y la interacción de filtros y estados.
+- [x] Verificar las vistas y la interacción de filtros y estados.
