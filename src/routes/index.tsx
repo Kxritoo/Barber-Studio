@@ -257,7 +257,7 @@ function Reserva() {
             placeholder="Celular (ej: 310 456 7821)"
             className="w-full rounded-lg border border-input bg-secondary px-4 py-3 outline-none focus:border-primary"
           />
-          <p className="px-2 py-1 text-center text-xs leading-relaxed text-muted-foreground">
+          <p className="border-none bg-transparent px-2 py-1 text-center text-xs leading-relaxed text-muted-foreground shadow-none">
             El pago se realiza directamente en el establecimiento en efectivo o Nequi/Daviplata al
             finalizar el servicio.
           </p>
