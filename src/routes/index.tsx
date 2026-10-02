@@ -136,7 +136,7 @@ function Reserva() {
     ]);
 
     if (dbError) {
-      return setError("Hubo un error guardando el turno en la base de datos.");
+      return setError(`Error de Supabase: ${dbError.message}`);
     }
 
     cargarTurnos();
