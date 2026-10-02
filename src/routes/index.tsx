@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   BARBEROS,
   HORAS,
@@ -8,9 +8,9 @@ import {
   formatPesos,
   hoyISO,
   nombreBarbero,
-  nombreServicio,
-  useBarber,
+  nombreServicio
 } from "@/lib/barber-store";
+import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -33,7 +33,6 @@ export const Route = createFileRoute("/")({
   component: Reserva,
 });
 
-// Número de WhatsApp de la barbería (código de país + número, sin espacios ni +)
 const WHATSAPP_NUMERO = "573001234567";
 const WHATSAPP_LINK = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(
   "Hola BarberStudio, tengo una duda sobre mi turno.",
@@ -83,7 +82,6 @@ function proximosDias(cantidad: number) {
 }
 
 function Reserva() {
-  const { agendar, estaOcupado, barberosLibres } = useBarber();
   const dias = useMemo(() => proximosDias(7), []);
   const [servicioId, setServicioId] = useState("corte");
   const [barberoId, setBarberoId] = useState("cualquiera");
@@ -94,26 +92,54 @@ function Reserva() {
   const [error, setError] = useState("");
   const [listo, setListo] = useState<{ hora: string; barbero: string } | null>(null);
 
+  const [turnos, setTurnos] = useState<any[]>([]);
+
+  const cargarTurnos = async () => {
+    const { data, error } = await supabase.from("turnos").select("*");
+    if (!error && data) {
+      setTurnos(data);
+    }
+  };
+
+  useEffect(() => {
+    cargarTurnos();
+  }, []);
+
+  const estaOcupado = (f: string, h: string, bId: string) =>
+    turnos.some((t) => t.fecha === f && t.hora === h && t.barberoId === bId);
+
+  const barberosLibres = (f: string, h: string) =>
+    BARBEROS.filter((b) => !estaOcupado(f, h, b.id));
+
   const horaDisponible = (h: string) =>
     barberoId === "cualquiera" ? barberosLibres(fecha, h).length > 0 : !estaOcupado(fecha, h, barberoId);
 
-  const confirmar = (e: React.FormEvent) => {
+  const confirmar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hora) return setError("Selecciona una hora disponible.");
     if (nombre.trim().length < 3) return setError("Escribe tu nombre completo.");
     if (telefono.replace(/\D/g, "").length < 7) return setError("Escribe un teléfono válido.");
-    const asignado =
-      barberoId === "cualquiera" ? barberosLibres(fecha, hora)[0]?.id : barberoId;
+    
+    const asignado = barberoId === "cualquiera" ? barberosLibres(fecha, hora)[0]?.id : barberoId;
     if (!asignado) return setError("Ese turno se acabó de ocupar, elige otra hora.");
-    agendar({
-      fecha,
-      hora,
-      barberoId: asignado,
-      servicioId,
-      cliente: nombre.trim(),
-      telefono: telefono.trim(),
-      origen: "web",
-    });
+    
+    const { error: dbError } = await supabase.from("turnos").insert([
+      {
+        fecha,
+        hora,
+        barberoId: asignado,
+        servicioId,
+        cliente: nombre.trim(),
+        telefono: telefono.trim(),
+        origen: "web",
+      },
+    ]);
+
+    if (dbError) {
+      return setError("Hubo un error guardando el turno en la base de datos.");
+    }
+
+    cargarTurnos();
     setError("");
     setListo({ hora, barbero: nombreBarbero(asignado) });
     setNombre("");
