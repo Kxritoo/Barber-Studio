@@ -95,10 +95,12 @@ function Reserva() {
   const [barberosDB, setBarberosDB] = useState<any[]>([]);
 
   const cargarDatos = async () => {
-    const { data: turnosData } = await supabase.from("turnos").select("*");
+    const { data: turnosData, error: turnosError } = await supabase.from("turnos").select("*");
+    console.log("Turnos desde Supabase:", turnosData, "Error:", turnosError);
     if (turnosData) setTurnos(turnosData);
 
-    const { data: barberosData } = await supabase.from("barberos").select("*");
+    const { data: barberosData, error: barberosError } = await supabase.from("barberos").select("*");
+    console.log("Barberos desde Supabase:", barberosData, "Error:", barberosError);
     if (barberosData) setBarberosDB(barberosData);
   };
 
