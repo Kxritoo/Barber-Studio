@@ -7,7 +7,6 @@ import {
   formatFechaLarga,
   formatPesos,
   hoyISO,
-  nombreBarbero,
   nombreServicio
 } from "@/lib/barber-store";
 import { supabase } from "@/lib/supabase";
@@ -93,26 +92,42 @@ function Reserva() {
   const [listo, setListo] = useState<{ hora: string; barbero: string } | null>(null);
 
   const [turnos, setTurnos] = useState<any[]>([]);
+  const [barberosDB, setBarberosDB] = useState<any[]>([]);
 
-  const cargarTurnos = async () => {
-    const { data, error } = await supabase.from("turnos").select("*");
-    if (!error && data) {
-      setTurnos(data);
-    }
+  const cargarDatos = async () => {
+    const { data: turnosData } = await supabase.from("turnos").select("*");
+    if (turnosData) setTurnos(turnosData);
+
+    const { data: barberosData } = await supabase.from("barberos").select("*");
+    if (barberosData) setBarberosDB(barberosData);
   };
 
   useEffect(() => {
-    cargarTurnos();
+    cargarDatos();
   }, []);
 
-  const estaOcupado = (f: string, h: string, bId: string) =>
-    turnos.some((t) => t.fecha === f && t.hora === h && t.barbero_id === bId);
+  const estaOcupadoUuid = (f: string, h: string, bUuid: string) =>
+    turnos.some((t) => t.fecha === f && t.hora === h && t.barbero_id === bUuid);
 
-  const barberosLibres = (f: string, h: string) =>
-    BARBEROS.filter((b) => !estaOcupado(f, h, b.id));
+  const estaOcupado = (f: string, h: string, frontendBarberId: string) => {
+    const localBarber = BARBEROS.find((b) => b.id === frontendBarberId);
+    if (!localBarber) return false;
+    const dbBarber = barberosDB.find((b) => b.nombre.toLowerCase() === localBarber.nombre.toLowerCase());
+    if (!dbBarber) return false;
+    return estaOcupadoUuid(f, h, dbBarber.id);
+  };
 
-  const horaDisponible = (h: string) =>
-    barberoId === "cualquiera" ? barberosLibres(fecha, h).length > 0 : !estaOcupado(fecha, h, barberoId);
+  const horaDisponible = (h: string) => {
+    if (barberoId === "cualquiera") {
+      return barberosDB.some((b) => !estaOcupadoUuid(fecha, h, b.id));
+    }
+    return !estaOcupado(fecha, h, barberoId);
+  };
+
+  const nombreBarberoUuid = (uuid: string) => {
+    const b = barberosDB.find((item) => item.id === uuid);
+    return b ? b.nombre : "Barbero";
+  };
 
   const confirmar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,16 +135,26 @@ function Reserva() {
     if (nombre.trim().length < 3) return setError("Escribe tu nombre completo.");
     if (telefono.replace(/\D/g, "").length < 7) return setError("Escribe un teléfono válido.");
     
-    const asignado = barberoId === "cualquiera" ? barberosLibres(fecha, hora)[0]?.id : barberoId;
-    if (!asignado) return setError("Ese turno se acabó de ocupar, elige otra hora.");
-    
+    let asignadoUuid = "";
+    if (barberoId === "cualquiera") {
+      const libre = barberosDB.find((b) => !estaOcupadoUuid(fecha, hora, b.id));
+      if (!libre) return setError("Ese turno se acabó de ocupar, elige otra hora.");
+      asignadoUuid = libre.id;
+    } else {
+      const localBarber = BARBEROS.find((b) => b.id === barberoId);
+      const dbBarber = barberosDB.find((b) => b.nombre.toLowerCase() === localBarber?.nombre.toLowerCase());
+      if (!dbBarber) return setError("Error identificando al barbero.");
+      if (estaOcupadoUuid(fecha, hora, dbBarber.id)) return setError("Ese turno ya está ocupado.");
+      asignadoUuid = dbBarber.id;
+    }
+
     const servicioObj = SERVICIOS.find((s) => s.id === servicioId);
 
     const { error: dbError } = await supabase.from("turnos").insert([
       {
         fecha,
         hora,
-        barbero_id: asignado,
+        barbero_id: asignadoUuid,
         servicio: servicioObj?.nombre || servicioId,
         precio: servicioObj?.precio || 0,
         cliente_nombre: nombre.trim(),
@@ -143,9 +168,9 @@ function Reserva() {
       return setError(`Error de Supabase: ${dbError.message}`);
     }
 
-    cargarTurnos();
+    cargarDatos();
     setError("");
-    setListo({ hora, barbero: nombreBarbero(asignado) });
+    setListo({ hora, barbero: nombreBarberoUuid(asignadoUuid) });
     setNombre("");
     setTelefono("");
     setHora(null);
