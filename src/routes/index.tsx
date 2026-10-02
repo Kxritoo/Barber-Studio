@@ -106,7 +106,7 @@ function Reserva() {
   }, []);
 
   const estaOcupado = (f: string, h: string, bId: string) =>
-    turnos.some((t) => t.fecha === f && t.hora === h && t.barberoId === bId);
+    turnos.some((t) => t.fecha === f && t.hora === h && t.barbero_id === bId);
 
   const barberosLibres = (f: string, h: string) =>
     BARBEROS.filter((b) => !estaOcupado(f, h, b.id));
@@ -123,15 +123,19 @@ function Reserva() {
     const asignado = barberoId === "cualquiera" ? barberosLibres(fecha, hora)[0]?.id : barberoId;
     if (!asignado) return setError("Ese turno se acabó de ocupar, elige otra hora.");
     
+    const servicioObj = SERVICIOS.find((s) => s.id === servicioId);
+
     const { error: dbError } = await supabase.from("turnos").insert([
       {
         fecha,
         hora,
-        barberoId: asignado,
-        servicioId,
-        cliente: nombre.trim(),
-        telefono: telefono.trim(),
-        origen: "web",
+        barbero_id: asignado,
+        servicio: servicioObj?.nombre || servicioId,
+        precio: servicioObj?.precio || 0,
+        cliente_nombre: nombre.trim(),
+        cliente_telefono: telefono.trim(),
+        estado: "Pendiente",
+        es_walk_in: false,
       },
     ]);
 
