@@ -64,7 +64,6 @@ const FAQS = [
   },
 ];
 
-// Obtiene la fecha local exacta de Colombia sin saltos UTC
 function getLocalHoyISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -96,7 +95,7 @@ function Reserva() {
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [error, setError] = useState("");
-  const [listo, setListo] = useState<{ hora: string; barbero: string } | null>(null);
+  const [listo, setListo] = useState<{ hora: string; barbero: string; servicio: string; precio: number } | null>(null);
 
   const [turnos, setTurnos] = useState<any[]>([]);
   const [barberosDB, setBarberosDB] = useState<any[]>([]);
@@ -115,7 +114,7 @@ function Reserva() {
 
   const esHoraPasada = (f: string, h: string) => {
     const hoyLocal = getLocalHoyISO();
-    if (f !== hoyLocal) return false; // Si no es hoy, no bloquea nada por horario
+    if (f !== hoyLocal) return false;
     const [horaH, minH] = h.split(":").map(Number);
     const ahora = new Date();
     if (horaH < ahora.getHours()) return true;
@@ -194,14 +193,19 @@ function Reserva() {
 
     cargarDatos();
     setError("");
-    setListo({ hora, barbero: nombreBarberoUuid(asignadoUuid) });
+    setListo({
+      hora,
+      barbero: nombreBarberoUuid(asignadoUuid),
+      servicio: servicioObj?.nombre || servicioId,
+      precio: servicioObj?.precio || 0,
+    });
     setNombre("");
     setTelefono("");
     setHora(null);
   };
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-2xl px-5 pb-16">
+    <main className="mx-auto min-h-screen w-full max-w-2xl px-5 pb-16 relative">
       <header className="flex items-center justify-between py-6">
         <div>
           <p className="text-xs tracking-[0.35em] text-primary">BARBERÍA & ESTILO TRADICIONAL EN MEDELLÍN</p>
@@ -222,13 +226,53 @@ function Reserva() {
         </p>
       </section>
 
+      {/* MODAL DE CONFIRMACIÓN ÉPICO */}
       {listo && (
-        <div className="mt-4 rounded-xl border border-primary/50 bg-primary/10 p-4 text-sm">
-          <p className="font-semibold text-primary">¡Turno confirmado, parcero!</p>
-          <p className="mt-1 text-foreground/90">
-            {formatFechaLarga(fecha)} a las {listo.hora} con {listo.barbero}. Te esperamos 5 minutos
-            antes.
-          </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md rounded-2xl border border-primary/40 bg-card p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 text-primary border border-primary/50 shadow-gold">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-8 w-8">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <h3 className="gold-text text-3xl font-bold">¡Turno Confirmado!</h3>
+            <p className="mt-1 text-xs tracking-wider text-primary">BARBERSTUDIO EL POBLADO</p>
+
+            <div className="my-5 rounded-xl border border-border bg-secondary/50 p-4 text-left space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Fecha:</span>
+                <span className="font-semibold capitalize">{formatFechaLarga(fecha)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Hora:</span>
+                <span className="font-semibold text-primary">{listo.hora}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Barbero:</span>
+                <span className="font-semibold">{listo.barbero}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Servicio:</span>
+                <span className="font-semibold">{listo.servicio}</span>
+              </div>
+              <div className="flex justify-between border-t border-border pt-2">
+                <span className="text-muted-foreground">Total en local:</span>
+                <span className="font-bold text-primary">{formatPesos(listo.precio)}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground mb-6">
+              Te esperamos 5 minutos antes en el local. El pago se realiza directamente allí.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setListo(null)}
+              className="w-full rounded-xl bg-primary py-3.5 text-base font-bold text-primary-foreground shadow-gold transition hover:brightness-110"
+            >
+              ¡Entendido, allá estaré!
+            </button>
+          </div>
         </div>
       )}
 
