@@ -6,7 +6,6 @@ import {
   SERVICIOS,
   formatFechaLarga,
   formatPesos,
-  hoyISO,
   nombreServicio
 } from "@/lib/barber-store";
 import { supabase } from "@/lib/supabase";
@@ -65,6 +64,14 @@ const FAQS = [
   },
 ];
 
+// Obtiene la fecha local exacta de Colombia sin saltos UTC
+function getLocalHoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 function proximosDias(cantidad: number) {
   const base = new Date();
   return Array.from({ length: cantidad }, (_, i) => {
@@ -84,7 +91,7 @@ function Reserva() {
   const dias = useMemo(() => proximosDias(7), []);
   const [servicioId, setServicioId] = useState("corte");
   const [barberoId, setBarberoId] = useState("cualquiera");
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useState(getLocalHoyISO());
   const [hora, setHora] = useState<string | null>(null);
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -107,7 +114,8 @@ function Reserva() {
   }, []);
 
   const esHoraPasada = (f: string, h: string) => {
-    if (f !== hoyISO()) return false;
+    const hoyLocal = getLocalHoyISO();
+    if (f !== hoyLocal) return false; // Si no es hoy, no bloquea nada por horario
     const [horaH, minH] = h.split(":").map(Number);
     const ahora = new Date();
     if (horaH < ahora.getHours()) return true;
