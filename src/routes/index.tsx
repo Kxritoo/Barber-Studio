@@ -124,7 +124,35 @@ function Reserva() {
     return estaOcupadoUuid(f, h, dbBarber.id);
   };
 
+  // Valida si la hora ya pasó el día de hoy
+  const esHoraPasada = (f: string, h: string) => {
+    if (f !== hoyISO()) return false;
+    const [horaH, minH] = h.split(":").map(Number);
+    const ahora = new Date();
+    if (horaH < ahora.getHours()) return true;
+    if (horaH === ahora.getHours() && minH <= ahora.getMinutes()) return true;
+    return false;
+  };
+
+  const estaOcupadoUuid = (f: string, h: string, bUuid: string) =>
+    turnos.some(
+      (t) =>
+        t.fecha === f &&
+        t.hora?.substring(0, 5) === h &&
+        t.barbero_id === bUuid &&
+        t.estado !== "Cancelada"
+    );
+
+  const estaOcupado = (f: string, h: string, frontendBarberId: string) => {
+    const localBarber = BARBEROS.find((b) => b.id === frontendBarberId);
+    if (!localBarber) return false;
+    const dbBarber = barberosDB.find((b) => b.nombre.toLowerCase() === localBarber.nombre.toLowerCase());
+    if (!dbBarber) return false;
+    return estaOcupadoUuid(f, h, dbBarber.id);
+  };
+
   const horaDisponible = (h: string) => {
+    if (esHoraPasada(fecha, h)) return false; // Bloquea si ya pasó la hora hoy
     if (barberoId === "cualquiera") {
       return barberosDB.some((b) => !estaOcupadoUuid(fecha, h, b.id));
     }
