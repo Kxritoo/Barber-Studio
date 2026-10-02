@@ -9,8 +9,8 @@ import {
   hoyISO,
   nombreBarbero,
   nombreServicio
-} from "@/lib/barber-store";
-import { supabase } from "@/lib/supabase";
+} from "../../lib/barber-store";
+import { supabase } from "../../lib/supabase";
 
 export const Route = createFileRoute("/")({
   head: () => ({
