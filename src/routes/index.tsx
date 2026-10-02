@@ -69,13 +69,13 @@ function proximosDias(cantidad: number) {
   const base = new Date();
   return Array.from({ length: cantidad }, (_, i) => {
     const d = new Date(base);
-    d.setUTCDate(d.getUTCDate() + i);
+    d.setDate(d.getDate() + i);
     return {
-      iso: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
-        d.getUTCDate(),
+      iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate(),
       ).padStart(2, "0")}`,
-      dia: DIAS_SEMANA[d.getUTCDay()],
-      num: d.getUTCDate(),
+      dia: DIAS_SEMANA[d.getDay()],
+      num: d.getDate(),
     };
   });
 }
@@ -95,12 +95,10 @@ function Reserva() {
   const [barberosDB, setBarberosDB] = useState<any[]>([]);
 
   const cargarDatos = async () => {
-    const { data: turnosData, error: turnosError } = await supabase.from("turnos").select("*");
-    console.log("Turnos desde Supabase:", turnosData, "Error:", turnosError);
+    const { data: turnosData } = await supabase.from("turnos").select("*");
     if (turnosData) setTurnos(turnosData);
 
-    const { data: barberosData, error: barberosError } = await supabase.from("barberos").select("*");
-    console.log("Barberos desde Supabase:", barberosData, "Error:", barberosError);
+    const { data: barberosData } = await supabase.from("barberos").select("*");
     if (barberosData) setBarberosDB(barberosData);
   };
 
@@ -108,8 +106,15 @@ function Reserva() {
     cargarDatos();
   }, []);
 
+  // Solo bloquea si el turno existe, coincide la fecha/hora/barbero y NO está cancelado
   const estaOcupadoUuid = (f: string, h: string, bUuid: string) =>
-    turnos.some((t) => t.fecha === f && t.hora === h && t.barbero_id === bUuid);
+    turnos.some(
+      (t) =>
+        t.fecha === f &&
+        t.hora?.substring(0, 5) === h &&
+        t.barbero_id === bUuid &&
+        t.estado !== "Cancelada"
+    );
 
   const estaOcupado = (f: string, h: string, frontendBarberId: string) => {
     const localBarber = BARBEROS.find((b) => b.id === frontendBarberId);
