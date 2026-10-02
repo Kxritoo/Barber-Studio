@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   BARBEROS,
   HORAS,
@@ -7,12 +7,9 @@ import {
   formatFechaLarga,
   formatPesos,
   hoyISO,
-  nombreBarbero,
-  nombreServicio,
-  useBarber,
-  type Cita,
-  type EstadoCita,
+  nombreServicio
 } from "@/lib/barber-store";
+import { supabase } from "@/lib/supabase";
 
 const PIN = "1234";
 
@@ -38,10 +35,10 @@ export const Route = createFileRoute("/admin")({
   component: Admin,
 });
 
-const badge: Record<EstadoCita, string> = {
-  pendiente: "bg-warning/15 text-warning border-warning/40",
-  completada: "bg-success/15 text-success border-success/40",
-  cancelada: "bg-destructive/15 text-destructive border-destructive/40",
+const badge: Record<string, string> = {
+  Pendiente: "bg-warning/15 text-warning border-warning/40",
+  Completada: "bg-success/15 text-success border-success/40",
+  Cancelada: "bg-destructive/15 text-destructive border-destructive/40",
 };
 
 function Admin() {
@@ -87,27 +84,59 @@ function Admin() {
 }
 
 function Agenda() {
-  const { citas, cambiarEstado } = useBarber();
+  const [citas, setCitas] = useState<any[]>([]);
+  const [barberosDB, setBarberosDB] = useState<any[]>([]);
   const [fecha, setFecha] = useState(hoyISO());
   const [filtroBarbero, setFiltroBarbero] = useState("todos");
   const [modal, setModal] = useState(false);
 
-  const delDia = useMemo(
-    () =>
-      citas
-        .filter((c) => c.fecha === fecha)
-        .filter((c) => filtroBarbero === "todos" || c.barberoId === filtroBarbero)
-        .sort((a, b) => a.hora.localeCompare(b.hora)),
-    [citas, fecha, filtroBarbero],
-  );
+  const cargarDatosAdmin = async () => {
+    const { data: turnosData } = await supabase.from("turnos").select("*");
+    if (turnosData) setCitas(turnosData);
 
-  const pendientes = delDia.filter((c) => c.estado === "pendiente").length;
+    const { data: barberosData } = await supabase.from("barberos").select("*");
+    if (barberosData) setBarberosDB(barberosData);
+  };
+
+  useEffect(() => {
+    cargarDatosAdmin();
+  }, []);
+
+  const cambiarEstado = async (id: string, nuevoEstado: string) => {
+    const { error } = await supabase
+      .from("turnos")
+      .update({ estado: nuevoEstado })
+      .eq("id", id);
+
+    if (!error) {
+      cargarDatosAdmin();
+    }
+  };
+
+  const nombreBarberoUuid = (uuid: string) => {
+    const b = barberosDB.find((item) => item.id === uuid);
+    return b ? b.nombre : "Barbero";
+  };
+
+  const delDia = useMemo(() => {
+    return citas
+      .filter((c) => c.fecha === fecha)
+      .filter((c) => {
+        if (filtroBarbero === "todos") return true;
+        const localBarber = BARBEROS.find((b) => b.id === filtroBarbero);
+        const dbBarber = barberosDB.find((b) => b.nombre.toLowerCase() === localBarber?.nombre.toLowerCase());
+        return c.barbero_id === dbBarber?.id;
+      })
+      .sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+  }, [citas, fecha, filtroBarbero, barberosDB]);
+
+  const pendientes = delDia.filter((c) => c.estado === "Pendiente").length;
   const porCobrar = delDia
-    .filter((c) => c.estado === "pendiente")
-    .reduce((total, c) => total + (SERVICIOS.find((s) => s.id === c.servicioId)?.precio ?? 0), 0);
+    .filter((c) => c.estado === "Pendiente")
+    .reduce((total, c) => total + (c.precio ?? 0), 0);
   const totalGanado = delDia
-    .filter((c) => c.estado === "completada")
-    .reduce((total, c) => total + (SERVICIOS.find((s) => s.id === c.servicioId)?.precio ?? 0), 0);
+    .filter((c) => c.estado === "Completada")
+    .reduce((total, c) => total + (c.precio ?? 0), 0);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-5 pb-28">
@@ -164,7 +193,12 @@ function Agenda() {
           </p>
         )}
         {delDia.map((c) => (
-          <TarjetaCita key={c.id} cita={c} onEstado={cambiarEstado} />
+          <TarjetaCita
+            key={c.id}
+            cita={c}
+            nombreBarb={nombreBarberoUuid(c.barbero_id)}
+            onEstado={cambiarEstado}
+          />
         ))}
       </div>
 
@@ -175,55 +209,66 @@ function Agenda() {
         + Turno rápido / Walk-in
       </button>
 
-      {modal && <ModalCitaRapida fecha={fecha} onClose={() => setModal(false)} />}
+      {modal && (
+        <ModalCitaRapida
+          fecha={fecha}
+          barberosDB={barberosDB}
+          onClose={() => {
+            setModal(false);
+            cargarDatosAdmin();
+          }}
+        />
+      )}
     </main>
   );
 }
 
 function TarjetaCita({
   cita,
+  nombreBarb,
   onEstado,
 }: {
-  cita: Cita;
-  onEstado: (id: string, estado: EstadoCita) => void;
+  cita: any;
+  nombreBarb: string;
+  onEstado: (id: string, estado: string) => void;
 }) {
-  const servicio = SERVICIOS.find((s) => s.id === cita.servicioId);
   return (
     <article className="card-surface p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-display text-2xl text-primary">{cita.hora}</p>
-          <p className="font-semibold">{cita.cliente}</p>
+          <p className="font-display text-2xl text-primary">{cita.hora?.substring(0, 5)}</p>
+          <p className="font-semibold">{cita.cliente_nombre}</p>
           <p className="text-xs text-muted-foreground">
-            {nombreServicio(cita.servicioId)} · {nombreBarbero(cita.barberoId)} ·{" "}
-            {servicio ? formatPesos(servicio.precio) : ""}
+            {cita.servicio} · {nombreBarb} · {formatPesos(cita.precio)}
           </p>
-          <a href={`tel:${cita.telefono.replace(/\s/g, "")}`} className="text-xs text-primary underline">
-            {cita.telefono}
-          </a>
+          {cita.cliente_telefono && (
+            <a href={`tel:${cita.cliente_telefono}`} className="text-xs text-primary underline">
+              {cita.cliente_telefono}
+            </a>
+          )}
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize ${badge[cita.estado]}`}>
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize ${badge[cita.estado] || "bg-secondary text-foreground"}`}>
           {cita.estado}
         </span>
       </div>
       <div className="mt-3 flex gap-2">
         <button
-          onClick={() => onEstado(cita.id, "completada")}
-          disabled={cita.estado === "completada"}
+          onClick={() => onEstado(cita.id, "Completada")}
+          disabled={cita.estado === "Completada"}
           className="flex-1 rounded-lg border border-success/50 py-2.5 text-sm font-semibold text-success disabled:opacity-40"
         >
           Completada
         </button>
         <button
-          onClick={() => onEstado(cita.id, "pendiente")}
-          disabled={cita.estado === "pendiente"}
+          onClick={() => onEstado(cita.id, "Pendiente")}
+          disabled={cita.estado === "Pendiente"}
           className="flex-1 rounded-lg border border-border py-2.5 text-sm font-semibold text-muted-foreground disabled:opacity-40"
         >
           Pendiente
         </button>
         <button
-          onClick={() => onEstado(cita.id, "cancelada")}
-          disabled={cita.estado === "cancelada"}
+          onClick={() => onEstado(cita.id, "Cancelada")}
+          disabled={cita.estado === "Cancelada"}
           className="flex-1 rounded-lg border border-destructive/50 py-2.5 text-sm font-semibold text-destructive disabled:opacity-40"
         >
           Cancelar
@@ -233,25 +278,54 @@ function TarjetaCita({
   );
 }
 
-function ModalCitaRapida({ fecha, onClose }: { fecha: string; onClose: () => void }) {
-  const { agendar, estaOcupado } = useBarber();
+function ModalCitaRapida({
+  fecha,
+  barberosDB,
+  onClose,
+}: {
+  fecha: string;
+  barberosDB: any[];
+  onClose: () => void;
+}) {
   const [form, setForm] = useState({
     cliente: "",
     telefono: "",
-    barberoId: "carlos",
+    barberoFrontendId: "carlos",
     servicioId: "corte",
     hora: "",
     fecha,
   });
   const [error, setError] = useState("");
 
-  const guardar = (e: React.FormEvent) => {
+  const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.cliente.trim().length < 3) return setError("Escribe el nombre del cliente.");
     if (!form.hora) return setError("Selecciona la hora.");
-    if (estaOcupado(form.fecha, form.hora, form.barberoId))
-      return setError("Ese barbero ya tiene un turno a esa hora.");
-    agendar({ ...form, cliente: form.cliente.trim(), telefono: form.telefono.trim() || "Sin teléfono", origen: "manual" });
+
+    const localBarber = BARBEROS.find((b) => b.id === form.barberoFrontendId);
+    const dbBarber = barberosDB.find((b) => b.nombre.toLowerCase() === localBarber?.nombre.toLowerCase());
+    if (!dbBarber) return setError("Error identificando al barbero.");
+
+    const servicioObj = SERVICIOS.find((s) => s.id === form.servicioId);
+
+    const { error: dbError } = await supabase.from("turnos").insert([
+      {
+        fecha: form.fecha,
+        hora: form.hora,
+        barbero_id: dbBarber.id,
+        servicio: servicioObj?.nombre || form.servicioId,
+        precio: servicioObj?.precio || 0,
+        cliente_nombre: form.cliente.trim(),
+        cliente_telefono: form.telefono.trim() || null,
+        estado: "Pendiente",
+        es_walk_in: true,
+      },
+    ]);
+
+    if (dbError) {
+      return setError(`Error: ${dbError.message}`);
+    }
+
     onClose();
   };
 
@@ -293,8 +367,8 @@ function ModalCitaRapida({ fecha, onClose }: { fecha: string; onClose: () => voi
             ))}
           </select>
           <select
-            value={form.barberoId}
-            onChange={(e) => setForm({ ...form, barberoId: e.target.value })}
+            value={form.barberoFrontendId}
+            onChange={(e) => setForm({ ...form, barberoFrontendId: e.target.value })}
             className="w-full rounded-lg border border-input bg-secondary px-4 py-3 outline-none focus:border-primary"
           >
             {BARBEROS.map((b) => (
@@ -329,11 +403,11 @@ function ModalCitaRapida({ fecha, onClose }: { fecha: string; onClose: () => voi
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-xl border border-border py-3.5 font-semibold text-muted-foreground"
+            className="flex-1 rounded-lg border border-border py-3.5 font-semibold text-muted-foreground"
           >
             Cerrar
           </button>
-          <button className="flex-1 rounded-xl bg-primary py-3.5 font-bold text-primary-foreground">
+          <button className="flex-1 rounded-lg bg-primary py-3.5 font-bold text-primary-foreground">
             Guardar turno
           </button>
         </div>
