@@ -159,7 +159,11 @@ function Agenda() {
         </Link>
       </header>
 
-      <div className="card-surface space-y-3 p-4">
+      {/* AQUÍ EMPIEZA LA PRUEBA DE IA BÁSICA (EL "ANTES") */}
+      <PruebaIABasica />
+      {/* AQUÍ TERMINA LA PRUEBA DE IA BÁSICA */}
+
+      <div className="card-surface mt-5 space-y-3 p-4">
         <label className="block text-xs text-muted-foreground">
           Fecha
           <input
@@ -412,6 +416,70 @@ function ModalCitaRapida({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ESTE ES EL COMPONENTE NUEVO QUE HABLA CON GEMINI
+function PruebaIABasica() {
+  const [pregunta, setPregunta] = useState("");
+  const [respuesta, setRespuesta] = useState("");
+  const [cargando, setCargando] = useState(false);
+
+  const enviarAGemini = async () => {
+    setCargando(true);
+    setRespuesta("");
+    
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("No se encuentra la llave VITE_GEMINI_API_KEY");
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: pregunta }] }],
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error?.message || "Falló la API de Gemini");
+
+      setRespuesta(data.candidates[0].content.parts[0].text);
+    } catch (err: any) {
+      setRespuesta("Error: " + err.message);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  return (
+    <div className="card-surface mt-5 rounded-xl border border-primary/30 p-5 shadow-lg">
+      <h3 className="gold-text mb-2 text-xl font-bold">Prueba IA Básica</h3>
+      <p className="mb-4 text-sm text-muted-foreground">Pregúntale algo a Gemini (Aún no conoce tus datos).</p>
+      
+      <input
+        value={pregunta}
+        onChange={(e) => setPregunta(e.target.value)}
+        placeholder="Ej: ¿Cuántos turnos tengo hoy en BarberStudio?"
+        className="mb-3 w-full rounded-lg border border-input bg-secondary px-4 py-3 text-foreground outline-none focus:border-primary"
+      />
+      <button
+        onClick={enviarAGemini}
+        disabled={cargando}
+        className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
+      >
+        {cargando ? "Consultando a Gemini..." : "Enviar pregunta"}
+      </button>
+
+      {respuesta && (
+        <div className="mt-4 whitespace-pre-wrap rounded-lg border border-border bg-secondary p-4 text-sm text-foreground">
+          {respuesta}
+        </div>
+      )}
     </div>
   );
 }
