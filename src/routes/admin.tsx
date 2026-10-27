@@ -422,6 +422,7 @@ function ModalCitaRapida({
 
 // ESTE ES EL COMPONENTE NUEVO QUE HABLA CON GEMINI
 function PruebaIABasica() {
+  const [isOpen, setIsOpen] = useState(false);
   const [pregunta, setPregunta] = useState("");
   const [respuesta, setRespuesta] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -457,29 +458,53 @@ function PruebaIABasica() {
   };
 
   return (
-    <div className="card-surface mt-5 rounded-xl border border-primary/30 p-5 shadow-lg">
-      <h3 className="gold-text mb-2 text-xl font-bold">Prueba IA Básica</h3>
-      <p className="mb-4 text-sm text-muted-foreground">Pregúntale algo a Gemini (Aún no conoce tus datos).</p>
-      
-      <input
-        value={pregunta}
-        onChange={(e) => setPregunta(e.target.value)}
-        placeholder="Ej: ¿Cuántos turnos tengo hoy en BarberStudio?"
-        className="mb-3 w-full rounded-lg border border-input bg-secondary px-4 py-3 text-foreground outline-none focus:border-primary"
-      />
+    <>
+      {/* Botón Flotante */}
       <button
-        onClick={enviarAGemini}
-        disabled={cargando}
-        className="w-full rounded-lg bg-primary px-4 py-3 font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-2xl text-primary-foreground shadow-gold transition-transform hover:scale-105"
+        title="Asistente IA"
       >
-        {cargando ? "Consultando a Gemini..." : "Enviar pregunta"}
+        ✨
       </button>
 
-      {respuesta && (
-        <div className="mt-4 whitespace-pre-wrap rounded-lg border border-border bg-secondary p-4 text-sm text-foreground">
-          {respuesta}
+      {/* Ventana Modal del Chat */}
+      {isOpen && (
+        <div className="fixed bottom-24 right-6 z-50 w-[min(90vw,22rem)] rounded-xl border border-primary/30 bg-card p-5 shadow-2xl">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="gold-text text-lg font-bold">Prueba IA Básica</h3>
+            <button 
+              onClick={() => setIsOpen(false)} 
+              className="text-muted-foreground hover:text-foreground"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Pregúntale algo a Gemini (Aún no conoce tus datos).
+          </p>
+          
+          <input
+            value={pregunta}
+            onChange={(e) => setPregunta(e.target.value)}
+            placeholder="Ej: ¿Cuántos turnos hay hoy?"
+            className="mb-3 w-full rounded-lg border border-input bg-secondary px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+          />
+          <button
+            onClick={enviarAGemini}
+            disabled={cargando}
+            className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
+          >
+            {cargando ? "Consultando..." : "Enviar pregunta"}
+          </button>
+
+          {respuesta && (
+            <div className="mt-4 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-secondary p-3 text-xs text-foreground">
+              {respuesta}
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </>
   );
 }
