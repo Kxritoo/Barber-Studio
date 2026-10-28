@@ -419,37 +419,80 @@ function ModalCitaRapida({
 }
 
 // ESTE ES EL COMPONENTE NUEVO QUE HABLA CON GEMINI
+const MODELOS_GEMINI = ["gemini-3.8-flash", "gemini-2.5-flash-lite"];
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function preguntarGemini(texto: string): Promise<string> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) throw new Error("No se encuentra la llave VITE_GEMINI_API_KEY");
+
+  let ultimoError = new Error("No se pudo conectar con Gemini.");
+
+  for (const modelo of MODELOS_GEMINI) {
+    for (let intento = 0; intento < 3; intento++) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({ contents: [{ parts: [{ text: texto }] }] }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        return (
+          data.candidates?.[0]?.content?.parts?.[0]?.text ??
+          "Gemini no devolvió texto (puede que la respuesta fuera bloqueada)."
+        );
+      }
+
+      const body = await response.json().catch(() => ({}));
+      ultimoError = new Error(body?.error?.message || `Error HTTP ${response.status}`);
+
+      // 404: ese modelo no existe, pasa al siguiente modelo
+      if (response.status === 404) break;
+      // Errores temporales: espera y reintenta (1s, 2s, 4s)
+      if ([429, 500, 503].includes(response.status)) {
+        await esperar(1000 * 2 ** intento);
+        continue;
+      }
+      // Cualquier otro error (key inválida, etc.): falla de una vez
+      throw ultimoError;
+    }
+  }
+
+  throw ultimoError;
+}
+
 function PruebaIABasica() {
   const [isOpen, setIsOpen] = useState(false);
   const [pregunta, setPregunta] = useState("");
   const [respuesta, setRespuesta] = useState("");
+  const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
 
   const enviarAGemini = async () => {
+    if (!pregunta.trim()) {
+      setError("Escribe una pregunta antes de enviar.");
+      return;
+    }
     setCargando(true);
     setRespuesta("");
-    
+    setError("");
+
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("No se encuentra la llave VITE_GEMINI_API_KEY");
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: pregunta }] }],
-          }),
-        }
-      );
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message || "Falló la API de Gemini");
-
-      setRespuesta(data.candidates[0].content.parts[0].text);
+      setRespuesta(await preguntarGemini(pregunta.trim()));
     } catch (err: any) {
-      setRespuesta("Error: " + err.message);
+      const msg: string = err.message || "";
+      setError(
+        msg.toLowerCase().includes("high demand")
+          ? "Gemini está muy ocupado en este momento. Intenta de nuevo en unos segundos."
+          : `No se pudo obtener respuesta: ${msg}`
+      );
     } finally {
       setCargando(false);
     }
@@ -466,25 +509,24 @@ function PruebaIABasica() {
         ✨
       </button>
 
-      {/* Ventana Modal del Chat */}
+      {/* Ventana del Chat */}
       {isOpen && (
         <div className="fixed bottom-24 right-6 z-50 w-[min(90vw,22rem)] rounded-xl border border-primary/30 bg-card p-5 shadow-2xl">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="gold-text text-lg font-bold">Prueba IA Básica</h3>
-            <button 
-              onClick={() => setIsOpen(false)} 
+            <button
+              onClick={() => setIsOpen(false)}
               className="text-muted-foreground hover:text-foreground"
             >
               ✕
             </button>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Pregúntale algo a Gemini.
-          </p>
-          
+          <p className="mb-4 text-xs text-muted-foreground">Pregúntale algo a Gemini.</p>
+
           <input
             value={pregunta}
             onChange={(e) => setPregunta(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !cargando && enviarAGemini()}
             placeholder="Ej: ¿Cuántos turnos hay hoy?"
             className="mb-3 w-full rounded-lg border border-input bg-secondary px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
           />
@@ -495,6 +537,12 @@ function PruebaIABasica() {
           >
             {cargando ? "Consultando..." : "Enviar pregunta"}
           </button>
+
+          {error && (
+            <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-xs text-destructive">
+              {error}
+            </p>
+          )}
 
           {respuesta && (
             <div className="mt-4 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-secondary p-3 text-xs text-foreground">
