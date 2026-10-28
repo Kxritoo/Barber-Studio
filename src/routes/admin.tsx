@@ -442,6 +442,13 @@ function armarContexto(citas: any[], barberos: any[]): string {
     .slice(0, 300);
 
   const hoy = hoyISO();
+  const horaActual = new Date().toLocaleTimeString("es-CO", {
+    timeZone: "America/Bogota",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
   const deHoy = recientes.filter((c) => c.fecha === hoy);
   const suma = (lista: any[]) => lista.reduce((t, c) => t + (c.precio ?? 0), 0);
 
@@ -453,12 +460,17 @@ function armarContexto(citas: any[], barberos: any[]): string {
     `Ganado hoy: ${suma(deHoy.filter((c) => c.estado === "Completada"))}`,
   ].join("\n");
 
-  const lineas = recientes.map(
-    (c) =>
-      `${c.fecha} | ${(c.hora || "").substring(0, 5)} | ${c.cliente_nombre} | ${c.servicio} | ${nombreBarbero(c.barbero_id)} | $${c.precio ?? 0} | ${c.estado}`
-  );
+  const lineas = recientes.map((c) => {
+    const hora = (c.hora || "").substring(0, 5);
+    const atrasado =
+      c.fecha === hoy && c.estado === "Pendiente" && hora && hora < horaActual
+        ? " | ATRASADO: la hora ya pasó y sigue pendiente"
+        : "";
+    return `${c.fecha} | ${hora} | ${c.cliente_nombre} | ${c.servicio} | ${nombreBarbero(c.barbero_id)} | $${c.precio ?? 0} | ${c.estado}${atrasado}`;
+  });
 
   return `Fecha de hoy: ${hoy}
+Hora actual (Colombia): ${horaActual}
 Barberos: ${barberos.map((b) => b.nombre).join(", ")}
 
 RESUMEN DE HOY:
