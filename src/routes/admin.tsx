@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   BARBEROS,
   HORAS,
@@ -159,7 +159,7 @@ function Agenda() {
         </Link>
       </header>
 
-      <PruebaIABasica citas={citas} barberos={barberosDB} />
+      <PruebaIABasica citas={citas} barberos={barberosDB} onCambio={cargarDatosAdmin} />
 
       <div className="card-surface mt-5 space-y-3 p-4">
         <label className="block text-xs text-muted-foreground">
@@ -419,12 +419,56 @@ function ModalCitaRapida({
 }
 
 // ─────────────────────────────────────────────
-// ASISTENTE IA (GEMINI) CONECTADO A LOS DATOS
+// ASISTENTE IA (GEMINI) CON CHAT Y ACCIONES
 // ─────────────────────────────────────────────
+
+type Mensaje = { rol: "user" | "ia" | "error"; texto: string };
+type Accion = {
+  id: string; // id del turno en Supabase
+  estado: string; // nuevo estado
+  resumen: string; // "Turno de X a las 10:30 (Carlos)"
+  descripcion: string; // "Cancelar: Turno de X a las 10:30 (Carlos)"
+};
 
 // Orden de prioridad: si uno está saturado o no existe, prueba el siguiente.
 const MODELOS_GEMINI = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+const ESTADOS_VALIDOS = ["Cancelada", "Completada", "Pendiente"];
+const VERBOS: Record<string, string> = {
+  Cancelada: "Cancelar",
+  Completada: "Marcar como completado",
+  Pendiente: "Volver a pendiente",
+};
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Le describe a Gemini la "herramienta" que puede pedir usar.
+// OJO: Gemini NO toca la base de datos. Solo PIDE la acción; la app la ejecuta
+// después de que tú confirmes con un botón.
+const HERRAMIENTAS = [
+  {
+    functionDeclarations: [
+      {
+        name: "cambiar_estado_turno",
+        description:
+          "Cambia el estado de un turno existente: cancelarlo, marcarlo como completado o devolverlo a pendiente. Úsala SOLO cuando el usuario lo pida de forma explícita.",
+        parameters: {
+          type: "OBJECT",
+          properties: {
+            turno_id: {
+              type: "STRING",
+              description: "El id exacto del turno, tal como aparece en la lista de TURNOS.",
+            },
+            nuevo_estado: {
+              type: "STRING",
+              enum: ESTADOS_VALIDOS,
+              description: "El nuevo estado del turno.",
+            },
+          },
+          required: ["turno_id", "nuevo_estado"],
+        },
+      },
+    ],
+  },
+];
 
 // Convierte los datos de Supabase en un texto que Gemini pueda leer
 function armarContexto(citas: any[], barberos: any[]): string {
@@ -466,7 +510,7 @@ function armarContexto(citas: any[], barberos: any[]): string {
       c.fecha === hoy && c.estado === "Pendiente" && hora && hora < horaActual
         ? " | ATRASADO: la hora ya pasó y sigue pendiente"
         : "";
-    return `${c.fecha} | ${hora} | ${c.cliente_nombre} | ${c.servicio} | ${nombreBarbero(c.barbero_id)} | $${c.precio ?? 0} | ${c.estado}${atrasado}`;
+    return `${c.id} | ${c.fecha} | ${hora} | ${c.cliente_nombre} | ${c.servicio} | ${nombreBarbero(c.barbero_id)} | $${c.precio ?? 0} | ${c.estado}${atrasado}`;
   });
 
   return `Fecha de hoy: ${hoy}
@@ -476,17 +520,34 @@ Barberos: ${barberos.map((b) => b.nombre).join(", ")}
 RESUMEN DE HOY:
 ${resumenHoy}
 
-TURNOS (fecha | hora | cliente | servicio | barbero | precio | estado):
+TURNOS (id | fecha | hora | cliente | servicio | barbero | precio | estado):
 ${lineas.join("\n") || "No hay turnos registrados."}`;
 }
 
-async function preguntarGemini(texto: string, contexto: string): Promise<string> {
+// Envía TODO el historial del chat + los datos actuales. Devuelve texto y,
+// si el usuario pidió cambiar un turno, la acción que propone Gemini.
+async function preguntarGemini(
+  historial: Mensaje[],
+  contexto: string
+): Promise<{ texto: string; accion?: { id: string; estado: string } }> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) throw new Error("No se encuentra la llave VITE_GEMINI_API_KEY");
 
   const instrucciones = `Eres el asistente interno de BarberStudio, una barbería. Respondes en español, de forma breve y clara, usando SOLO los datos de abajo. Si la respuesta no está en los datos, di que no tienes esa información. No inventes turnos, clientes ni precios.
 
+Si el usuario te pide cancelar un turno, marcarlo como completado o devolverlo a pendiente, usa la función cambiar_estado_turno con el id EXACTO del turno. Si hay más de un turno que podría coincidir, o no estás seguro de cuál es, pregunta primero. Nunca afirmes que la acción ya se hizo: el usuario debe confirmarla con un botón. Responde con una frase corta explicando qué vas a hacer.
+
 ${contexto}`;
+
+  // Solo texto: sin mensajes de error, máximo 20 mensajes, y empezando por el usuario
+  const contents = historial
+    .filter((m) => m.rol !== "error" && m.texto.trim())
+    .slice(-20)
+    .map((m) => ({
+      role: m.rol === "user" ? "user" : "model",
+      parts: [{ text: m.texto }],
+    }));
+  while (contents.length && contents[0].role === "model") contents.shift();
 
   let ultimoError = new Error("No se pudo conectar con Gemini.");
 
@@ -502,17 +563,36 @@ ${contexto}`;
           },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: instrucciones }] },
-            contents: [{ parts: [{ text: texto }] }],
+            contents,
+            tools: HERRAMIENTAS,
           }),
         }
       );
 
       if (response.ok) {
         const data = await response.json();
-        return (
-          data.candidates?.[0]?.content?.parts?.[0]?.text ??
-          "Gemini no devolvió texto (puede que la respuesta fuera bloqueada)."
-        );
+        const parts: any[] = data.candidates?.[0]?.content?.parts ?? [];
+        const texto = parts
+          .filter((p) => !p.thought)
+          .map((p) => p.text ?? "")
+          .join("")
+          .trim();
+        const llamada = parts.find((p) => p.functionCall)?.functionCall;
+
+        if (llamada?.name === "cambiar_estado_turno") {
+          return {
+            texto,
+            accion: {
+              id: String(llamada.args?.turno_id ?? ""),
+              estado: String(llamada.args?.nuevo_estado ?? ""),
+            },
+          };
+        }
+        return {
+          texto:
+            texto ||
+            "Gemini no devolvió texto (puede que la respuesta fuera bloqueada).",
+        };
       }
 
       const body = await response.json().catch(() => ({}));
@@ -533,27 +613,71 @@ ${contexto}`;
   throw ultimoError;
 }
 
-function PruebaIABasica({ citas, barberos }: { citas: any[]; barberos: any[] }) {
+function PruebaIABasica({
+  citas,
+  barberos,
+  onCambio,
+}: {
+  citas: any[];
+  barberos: any[];
+  onCambio: () => Promise<void> | void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [pregunta, setPregunta] = useState("");
-  const [respuesta, setRespuesta] = useState("");
-  const [error, setError] = useState("");
+  const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [cargando, setCargando] = useState(false);
+  const [accion, setAccion] = useState<Accion | null>(null);
+  const [ejecutando, setEjecutando] = useState(false);
+  const finRef = useRef<HTMLDivElement>(null);
 
-  const enviarAGemini = async () => {
-    if (!pregunta.trim()) {
-      setError("Escribe una pregunta antes de enviar.");
-      return;
-    }
+  // Baja el chat al último mensaje
+  useEffect(() => {
+    finRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [mensajes, accion, cargando, isOpen]);
+
+  const agregar = (rol: Mensaje["rol"], texto: string) =>
+    setMensajes((prev) => [...prev, { rol, texto }]);
+
+  const enviar = async () => {
+    const texto = pregunta.trim();
+    if (!texto || cargando) return;
+
+    const nuevoHistorial: Mensaje[] = [...mensajes, { rol: "user", texto }];
+    setMensajes(nuevoHistorial);
+    setPregunta("");
+    setAccion(null);
     setCargando(true);
-    setRespuesta("");
-    setError("");
 
     try {
-      setRespuesta(await preguntarGemini(pregunta.trim(), armarContexto(citas, barberos)));
+      const r = await preguntarGemini(nuevoHistorial, armarContexto(citas, barberos));
+
+      if (r.accion) {
+        // Verifico yo mismo que el turno exista y que el estado sea válido
+        const cita = citas.find((c) => c.id === r.accion!.id);
+        if (!cita || !ESTADOS_VALIDOS.includes(r.accion.estado)) {
+          agregar(
+            "ia",
+            r.texto ||
+              "No pude identificar ese turno con seguridad. ¿Me dices el nombre del cliente y la hora?"
+          );
+        } else {
+          const nombreB = barberos.find((b) => b.id === cita.barbero_id)?.nombre ?? "Barbero";
+          const resumen = `Turno de ${cita.cliente_nombre} a las ${(cita.hora || "").substring(0, 5)} (${nombreB}, ${cita.fecha})`;
+          agregar("ia", r.texto || "Puedo hacer ese cambio. Confírmalo aquí abajo:");
+          setAccion({
+            id: cita.id,
+            estado: r.accion.estado,
+            resumen,
+            descripcion: `${VERBOS[r.accion.estado]}: ${resumen}`,
+          });
+        }
+      } else {
+        agregar("ia", r.texto);
+      }
     } catch (err: any) {
       const msg: string = err.message || "";
-      setError(
+      agregar(
+        "error",
         msg.toLowerCase().includes("high demand")
           ? "Gemini está muy ocupado en este momento. Intenta de nuevo en unos segundos."
           : `No se pudo obtener respuesta: ${msg}`
@@ -561,6 +685,30 @@ function PruebaIABasica({ citas, barberos }: { citas: any[]; barberos: any[] }) 
     } finally {
       setCargando(false);
     }
+  };
+
+  const confirmar = async () => {
+    if (!accion) return;
+    setEjecutando(true);
+    const { error } = await supabase
+      .from("turnos")
+      .update({ estado: accion.estado })
+      .eq("id", accion.id);
+    setEjecutando(false);
+
+    if (error) {
+      agregar("error", `No se pudo cambiar el turno: ${error.message}`);
+    } else {
+      agregar("ia", `✅ Listo. ${accion.resumen} ahora está: ${accion.estado}.`);
+      await onCambio(); // refresca la agenda y los datos de la IA
+    }
+    setAccion(null);
+  };
+
+  const descartar = () => {
+    if (!accion) return;
+    agregar("ia", "Entendido, no hice ningún cambio.");
+    setAccion(null);
   };
 
   return (
@@ -574,48 +722,111 @@ function PruebaIABasica({ citas, barberos }: { citas: any[]; barberos: any[] }) 
         ✨
       </button>
 
-      {/* Ventana del Chat */}
+      {/* Ventana del Chat (el historial se conserva aunque la cierres; se borra al refrescar) */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-50 w-[min(90vw,22rem)] rounded-xl border border-primary/30 bg-card p-5 shadow-2xl">
-          <div className="mb-4 flex items-center justify-between">
+        <div className="fixed bottom-24 right-6 z-50 w-[min(90vw,24rem)] rounded-xl border border-primary/30 bg-card p-5 shadow-2xl">
+          <div className="mb-3 flex items-center justify-between">
             <h3 className="gold-text text-lg font-bold">Asistente IA</h3>
+            <div className="flex items-center gap-3">
+              {mensajes.length > 0 && (
+                <button
+                  onClick={() => {
+                    setMensajes([]);
+                    setAccion(null);
+                  }}
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
+                >
+                  Borrar chat
+                </button>
+              )}
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Mensajes */}
+          <div className="mb-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+            {mensajes.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Pregúntame por los turnos, barberos o ingresos. También puedo cancelar o
+                completar un turno si me lo pides (te pediré confirmación).
+              </p>
+            )}
+
+            {mensajes.map((m, i) => (
+              <div
+                key={i}
+                className={`flex ${m.rol === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-xs ${
+                    m.rol === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : m.rol === "error"
+                        ? "border border-destructive/40 bg-destructive/15 text-destructive"
+                        : "border border-border bg-secondary text-foreground"
+                  }`}
+                >
+                  {m.texto}
+                </div>
+              </div>
+            ))}
+
+            {cargando && (
+              <div className="flex justify-start">
+                <div className="rounded-lg border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground">
+                  Consultando...
+                </div>
+              </div>
+            )}
+
+            {/* Confirmación de acción */}
+            {accion && (
+              <div className="rounded-lg border border-primary/50 bg-primary/10 p-3">
+                <p className="text-xs font-semibold text-foreground">{accion.descripcion}</p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={confirmar}
+                    disabled={ejecutando}
+                    className="flex-1 rounded-lg bg-primary py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
+                  >
+                    {ejecutando ? "Aplicando..." : "Confirmar"}
+                  </button>
+                  <button
+                    onClick={descartar}
+                    disabled={ejecutando}
+                    className="flex-1 rounded-lg border border-border py-2 text-xs font-semibold text-muted-foreground disabled:opacity-50"
+                  >
+                    No, cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div ref={finRef} />
+          </div>
+
+          {/* Entrada */}
+          <div className="flex gap-2">
+            <input
+              value={pregunta}
+              onChange={(e) => setPregunta(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && enviar()}
+              placeholder="Escribe tu pregunta..."
+              className="min-w-0 flex-1 rounded-lg border border-input bg-secondary px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+            />
             <button
-              onClick={() => setIsOpen(false)}
-              className="text-muted-foreground hover:text-foreground"
+              onClick={enviar}
+              disabled={cargando || !pregunta.trim()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
             >
-              ✕
+              Enviar
             </button>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Pregúntale sobre los turnos, barberos e ingresos.
-          </p>
-
-          <input
-            value={pregunta}
-            onChange={(e) => setPregunta(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !cargando && enviarAGemini()}
-            placeholder="Ej: ¿Cuántos turnos pendientes hay hoy?"
-            className="mb-3 w-full rounded-lg border border-input bg-secondary px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-          />
-          <button
-            onClick={enviarAGemini}
-            disabled={cargando}
-            className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:brightness-110 disabled:opacity-50"
-          >
-            {cargando ? "Consultando..." : "Enviar pregunta"}
-          </button>
-
-          {error && (
-            <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/15 p-3 text-xs text-destructive">
-              {error}
-            </p>
-          )}
-
-          {respuesta && (
-            <div className="mt-4 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-secondary p-3 text-xs text-foreground">
-              {respuesta}
-            </div>
-          )}
         </div>
       )}
     </>
