@@ -159,7 +159,7 @@ function Agenda() {
         </Link>
       </header>
 
-      <PruebaIABasica />
+      <PruebaIABasica citas={citas} barberos={barberosDB} />
 
       <div className="card-surface mt-5 space-y-3 p-4">
         <label className="block text-xs text-muted-foreground">
@@ -418,13 +418,63 @@ function ModalCitaRapida({
   );
 }
 
-// ESTE ES EL COMPONENTE NUEVO QUE HABLA CON GEMINI
+// ─────────────────────────────────────────────
+// ASISTENTE IA (GEMINI) CONECTADO A LOS DATOS
+// ─────────────────────────────────────────────
+
+// Orden de prioridad: si uno está saturado o no existe, prueba el siguiente.
 const MODELOS_GEMINI = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function preguntarGemini(texto: string): Promise<string> {
+// Convierte los datos de Supabase en un texto que Gemini pueda leer
+function armarContexto(citas: any[], barberos: any[]): string {
+  const nombreBarbero = (id: string) =>
+    barberos.find((b) => b.id === id)?.nombre ?? "Desconocido";
+
+  // Solo turnos de los últimos 30 días en adelante, para no enviar de más
+  const limite = new Date();
+  limite.setDate(limite.getDate() - 30);
+  const desde = limite.toISOString().slice(0, 10);
+
+  const recientes = citas
+    .filter((c) => c.fecha >= desde)
+    .sort((a, b) => `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`))
+    .slice(0, 300);
+
+  const hoy = hoyISO();
+  const deHoy = recientes.filter((c) => c.fecha === hoy);
+  const suma = (lista: any[]) => lista.reduce((t, c) => t + (c.precio ?? 0), 0);
+
+  // Estos totales se calculan aquí, porque la IA a veces se equivoca sumando
+  const resumenHoy = [
+    `Turnos hoy: ${deHoy.length}`,
+    `Pendientes hoy: ${deHoy.filter((c) => c.estado === "Pendiente").length}`,
+    `Por cobrar hoy: ${suma(deHoy.filter((c) => c.estado === "Pendiente"))}`,
+    `Ganado hoy: ${suma(deHoy.filter((c) => c.estado === "Completada"))}`,
+  ].join("\n");
+
+  const lineas = recientes.map(
+    (c) =>
+      `${c.fecha} | ${(c.hora || "").substring(0, 5)} | ${c.cliente_nombre} | ${c.servicio} | ${nombreBarbero(c.barbero_id)} | $${c.precio ?? 0} | ${c.estado}`
+  );
+
+  return `Fecha de hoy: ${hoy}
+Barberos: ${barberos.map((b) => b.nombre).join(", ")}
+
+RESUMEN DE HOY:
+${resumenHoy}
+
+TURNOS (fecha | hora | cliente | servicio | barbero | precio | estado):
+${lineas.join("\n") || "No hay turnos registrados."}`;
+}
+
+async function preguntarGemini(texto: string, contexto: string): Promise<string> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) throw new Error("No se encuentra la llave VITE_GEMINI_API_KEY");
+
+  const instrucciones = `Eres el asistente interno de BarberStudio, una barbería. Respondes en español, de forma breve y clara, usando SOLO los datos de abajo. Si la respuesta no está en los datos, di que no tienes esa información. No inventes turnos, clientes ni precios.
+
+${contexto}`;
 
   let ultimoError = new Error("No se pudo conectar con Gemini.");
 
@@ -438,7 +488,10 @@ async function preguntarGemini(texto: string): Promise<string> {
             "Content-Type": "application/json",
             "x-goog-api-key": apiKey,
           },
-          body: JSON.stringify({ contents: [{ parts: [{ text: texto }] }] }),
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: instrucciones }] },
+            contents: [{ parts: [{ text: texto }] }],
+          }),
         }
       );
 
@@ -468,7 +521,7 @@ async function preguntarGemini(texto: string): Promise<string> {
   throw ultimoError;
 }
 
-function PruebaIABasica() {
+function PruebaIABasica({ citas, barberos }: { citas: any[]; barberos: any[] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [pregunta, setPregunta] = useState("");
   const [respuesta, setRespuesta] = useState("");
@@ -485,7 +538,7 @@ function PruebaIABasica() {
     setError("");
 
     try {
-      setRespuesta(await preguntarGemini(pregunta.trim()));
+      setRespuesta(await preguntarGemini(pregunta.trim(), armarContexto(citas, barberos)));
     } catch (err: any) {
       const msg: string = err.message || "";
       setError(
@@ -513,7 +566,7 @@ function PruebaIABasica() {
       {isOpen && (
         <div className="fixed bottom-24 right-6 z-50 w-[min(90vw,22rem)] rounded-xl border border-primary/30 bg-card p-5 shadow-2xl">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="gold-text text-lg font-bold">Prueba IA Básica</h3>
+            <h3 className="gold-text text-lg font-bold">Asistente IA</h3>
             <button
               onClick={() => setIsOpen(false)}
               className="text-muted-foreground hover:text-foreground"
@@ -521,13 +574,15 @@ function PruebaIABasica() {
               ✕
             </button>
           </div>
-          <p className="mb-4 text-xs text-muted-foreground">Pregúntale algo a Gemini.</p>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Pregúntale sobre los turnos, barberos e ingresos.
+          </p>
 
           <input
             value={pregunta}
             onChange={(e) => setPregunta(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !cargando && enviarAGemini()}
-            placeholder="Ej: ¿Cuántos turnos hay hoy?"
+            placeholder="Ej: ¿Cuántos turnos pendientes hay hoy?"
             className="mb-3 w-full rounded-lg border border-input bg-secondary px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
           />
           <button
