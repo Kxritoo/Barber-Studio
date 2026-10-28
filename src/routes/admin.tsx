@@ -419,7 +419,7 @@ function ModalCitaRapida({
 }
 
 // ESTE ES EL COMPONENTE NUEVO QUE HABLA CON GEMINI
-const MODELOS_GEMINI = ["gemini-3.8-flash", "gemini-2.5-flash-lite"];
+const MODELOS_GEMINI = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function preguntarGemini(texto: string): Promise<string> {
