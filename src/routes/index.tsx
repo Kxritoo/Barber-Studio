@@ -101,9 +101,11 @@ function Reserva() {
   const [barberosDB, setBarberosDB] = useState<any[]>([]);
 
   const cargarDatos = async () => {
-    const { data: turnosData } = await supabase.from("turnos").select("*");
+    // LLAMADO SEGURO: Usamos la función RPC en lugar de leer toda la tabla
+    const { data: turnosData } = await supabase.rpc("turnos_ocupados");
     if (turnosData) setTurnos(turnosData);
 
+    // La tabla barberos sí tiene permiso público de lectura
     const { data: barberosData } = await supabase.from("barberos").select("*");
     if (barberosData) setBarberosDB(barberosData);
   };
