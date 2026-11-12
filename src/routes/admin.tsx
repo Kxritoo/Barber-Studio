@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useRef } from "react";
+import type { Session } from "@supabase/supabase-js";
 import {
   BARBEROS,
   HORAS,
@@ -10,8 +11,7 @@ import {
   nombreServicio
 } from "@/lib/barber-store";
 import { supabase } from "@/lib/supabase";
-
-const PIN = "1234";
+import { Login } from "@/components/Login";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -41,49 +41,42 @@ const badge: Record<string, string> = {
   Cancelada: "bg-destructive/15 text-destructive border-destructive/40",
 };
 
+// ─────────────────────────────────────────────
+// PUERTA DE ENTRADA: sin sesión → Login
+// (la seguridad real la dan las políticas RLS de Supabase;
+//  esto solo decide qué pantalla se muestra)
+// ─────────────────────────────────────────────
 function Admin() {
-  const [pin, setPin] = useState("");
-  const [abierto, setAbierto] = useState(false);
-  const [error, setError] = useState("");
+  const [sesion, setSesion] = useState<Session | null>(null);
+  const [verificando, setVerificando] = useState(true);
 
-  if (!abierto) {
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSesion(data.session);
+      setVerificando(false);
+    });
+
+    const { data: suscripcion } = supabase.auth.onAuthStateChange((_evento, nuevaSesion) => {
+      setSesion(nuevaSesion);
+    });
+
+    return () => suscripcion.subscription.unsubscribe();
+  }, []);
+
+  if (verificando) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-        <h1 className="gold-text text-4xl">BARBERSTUDIO</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Acceso solo para el equipo.</p>
-        <form
-          className="mt-6 space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (pin === PIN) setAbierto(true);
-            else setError("PIN incorrecto.");
-          }}
-        >
-          <input
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            inputMode="numeric"
-            maxLength={6}
-            placeholder="PIN"
-            className="w-full rounded-lg border border-input bg-secondary px-4 py-4 text-center text-2xl tracking-[0.5em] outline-none focus:border-primary"
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <button className="w-full rounded-xl bg-primary py-4 font-bold text-primary-foreground shadow-gold">
-            Entrar
-          </button>
-          <p className="text-center text-xs text-muted-foreground">PIN de demostración: 1234</p>
-          <Link to="/" className="block text-center text-xs text-muted-foreground underline">
-            Volver a la reserva
-          </Link>
-        </form>
+      <main className="mx-auto flex min-h-screen max-w-sm items-center justify-center px-6">
+        <p className="text-sm text-muted-foreground">Verificando sesión...</p>
       </main>
     );
   }
 
-  return <Agenda />;
+  if (!sesion) return <Login />;
+
+  return <Agenda onSalir={() => supabase.auth.signOut()} />;
 }
 
-function Agenda() {
+function Agenda({ onSalir }: { onSalir: () => void }) {
   const [citas, setCitas] = useState<any[]>([]);
   const [barberosDB, setBarberosDB] = useState<any[]>([]);
   const [fecha, setFecha] = useState(hoyISO());
@@ -154,9 +147,17 @@ function Agenda() {
             </span>
           </div>
         </div>
-        <Link to="/" className="rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground">
-          Vista cliente
-        </Link>
+        <div className="flex flex-col gap-2">
+          <Link to="/" className="rounded-lg border border-border px-3 py-2 text-center text-xs text-muted-foreground">
+            Vista cliente
+          </Link>
+          <button
+            onClick={onSalir}
+            className="rounded-lg border border-destructive/50 px-3 py-2 text-xs text-destructive"
+          >
+            Cerrar sesión
+          </button>
+        </div>
       </header>
 
       <PruebaIABasica citas={citas} barberos={barberosDB} onCambio={cargarDatosAdmin} />
